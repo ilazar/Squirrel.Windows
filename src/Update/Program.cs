@@ -600,15 +600,34 @@ namespace Squirrel.Update
             }
 
             var parentPid = NativeMethods.GetParentProcessId();
-            this.Log().Info("Waiting for parent " + parentPid + " to exit");
-            if (shouldWait) waitForParentToExit();
-            this.Log().Info("parent has exited");
+            this.Log().Info("Waiting for parent " + parentPid + " to exit, shouldWait " + shouldWait);
+            var startTicks = DateTime.Now.Ticks;
+            if (shouldWait)
+            {
+                waitForParentToExit();
+                Thread.Sleep(2000);
+            }
+            var elapsedSpan = new TimeSpan(DateTime.Now.Ticks - startTicks);
+            this.Log().Info("parent has exited after " + elapsedSpan.TotalMilliseconds);
 
             try {
                 var currentExe = RunFromCurrent(exeName, appDir, targetExe);
                 if (currentExe != null)
                 {
                     targetExe = currentExe;
+                }
+                this.Log().Info("About to update shortcuts");
+                try
+                {
+                    var appName = getAppNameFromDirectory();
+                    var defaultLocations = ShortcutLocation.StartMenu | ShortcutLocation.Desktop;
+                    using (var mgr = new UpdateManager("", appName))
+                    {
+                        mgr.CreateShortcutsForExecutable(exeName, defaultLocations, true);
+                    }
+                } catch(Exception e)
+                {
+                    this.Log().InfoException("Failed to update shortcut", e);
                 }
                 this.Log().Info("About to launch: '{0}': {1}", targetExe.FullName, arguments ?? "");
                 Process.Start(new ProcessStartInfo(targetExe.FullName, arguments ?? "") { WorkingDirectory = Path.GetDirectoryName(targetExe.FullName) });

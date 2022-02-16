@@ -415,7 +415,14 @@ namespace Squirrel
 
             foreach (FileInfo fi in dir.GetFiles())
             {
-                fi.Delete();
+                try
+                {
+                    fi.Delete();
+                }
+                catch (Exception ex)
+                {
+                    Log().Error($"Failed to delete file {fi.Name}\n{ex.Message}");
+                }
             }
 
             foreach (DirectoryInfo di in dir.GetDirectories())
@@ -434,7 +441,13 @@ namespace Squirrel
             foreach (FileInfo fi in source.GetFiles())
             {
                 Console.WriteLine(@"Copying {0}\{1}", target.FullName, fi.Name);
-                fi.CopyTo(Path.Combine(target.FullName, fi.Name), true);
+                try
+                {
+                    fi.CopyTo(Path.Combine(target.FullName, fi.Name), true);
+                } catch(Exception ex)
+                {
+                    Log().Error($"Failed to copy file {fi.Name}\n{ex.Message}");
+                }
             }
 
             // Copy each subdirectory using recursion.

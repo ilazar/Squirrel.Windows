@@ -32,6 +32,8 @@ namespace Squirrel
                 progress = progress ?? (_ => { });
 
                 progress(0);
+                var pid = Process.GetCurrentProcess().Id;
+                this.Log().Info("Apply releases (v5.0.0), current pid " + pid);
 
                 // Progress range: 00 -> 40
                 var release = await createFullPackagesFromDeltas(updateInfo.ReleasesToApply, updateInfo.CurrentlyInstalledVersion, new ApplyReleasesProgress(updateInfo.ReleasesToApply.Count, x => progress(CalculateProgress(x, 0, 40))));
@@ -78,7 +80,8 @@ namespace Squirrel
                 this.Log().Info("Fixing up tray icons");
 
                 var trayFixer = new TrayStateChanger();
-                var appDir = new DirectoryInfo(Utility.AppDirForRelease(rootAppDirectory, updateInfo.FutureReleaseEntry));
+//                 var appDir = new DirectoryInfo(Utility.AppDirForRelease(rootAppDirectory, updateInfo.FutureReleaseEntry));
+                var appDir = new DirectoryInfo(Path.Combine(rootAppDirectory, "current"));
                 var allExes = appDir.GetFiles("*.exe").Select(x => x.Name).ToList();
 
                 this.ErrorIfThrows(() => trayFixer.RemoveDeadEntries(allExes, rootAppDirectory, updateInfo.FutureReleaseEntry.Version.ToString()));
@@ -105,6 +108,16 @@ namespace Squirrel
 
             public async Task FullUninstall()
             {
+                try
+                {
+                    RemoveShortcutsForExecutable(Path.Combine(rootAppDirectory, "current", "8x8 Work.exe"), ShortcutLocation.StartMenu | ShortcutLocation.Desktop);
+                } catch (Exception ignore)
+                {}
+                try
+                {
+                    RemoveShortcutsForExecutable(Path.Combine(rootAppDirectory, "8x8 Work.exe"), ShortcutLocation.StartMenu | ShortcutLocation.Desktop);
+                } catch (Exception ignore)
+                {}
                 var currentRelease = getReleases().MaxBy(x => x.Name.ToSemanticVersion()).FirstOrDefault();
 
                 this.Log().Info("Starting full uninstall");
@@ -161,7 +174,7 @@ namespace Squirrel
 
             public Dictionary<ShortcutLocation, ShellLink> GetShortcutsForExecutable(string exeName, ShortcutLocation locations, string programArguments)
             {
-                this.Log().Info("About to create shortcuts for {0}, rootAppDir {1}", exeName, rootAppDirectory);
+                this.Log().Info("(get) About to create shortcuts for {0}, rootAppDir {1}", exeName, rootAppDirectory);
 
                 var releases = Utility.LoadLocalReleases(Utility.LocalReleaseFileForAppDir(rootAppDirectory));
                 var thisRelease = Utility.FindCurrentVersion(releases);
@@ -170,7 +183,10 @@ namespace Squirrel
                     Utility.PackageDirectoryForAppDir(rootAppDirectory),
                     thisRelease.Filename));
 
+//                 var exePath = Path.Combine(Utility.AppDirForRelease(rootAppDirectory, thisRelease), exeName);
                 var exePath = Path.Combine(Utility.AppDirForRelease(rootAppDirectory, thisRelease), exeName);
+                var currentExeName = "8x8 Work.exe";
+                var currentExePath = Path.Combine(Path.Combine(rootAppDirectory, "current"), currentExeName);
                 var fileVerInfo = FileVersionInfo.GetVersionInfo(exePath);
 
                 var ret = new Dictionary<ShortcutLocation, ShellLink>();
@@ -178,18 +194,24 @@ namespace Squirrel
                     if (!locations.HasFlag(f)) continue;
 
                     var file = linkTargetForVersionInfo(f, zf, fileVerInfo);
-                    var appUserModelId = String.Format("com.squirrel.{0}.{1}", zf.Id.Replace(" ", ""), exeName.Replace(".exe", "").Replace(" ", ""));
+//                     var appUserModelId = String.Format("com.squirrel.{0}.{1}", zf.Id.Replace(" ", ""), exeName.Replace(".exe", "").Replace(" ", ""));
+                    var appUserModelId = String.Format("com.squirrel.{0}.{1}", zf.Id.Replace(" ", ""), currentExeName.Replace(".exe", "").Replace(" ", ""));
                     var toastActivatorCLSDID = Utility.CreateGuidFromHash(appUserModelId).ToString();
 
-                    this.Log().Info("Creating shortcut for {0} => {1}", exeName, file);
-                    this.Log().Info("appUserModelId: {0} | toastActivatorCLSID: {1}", appUserModelId, toastActivatorCLSDID);
+//                     this.Log().Info("Creating shortcut for {0} => {1}", exeName, file);
+//                     this.Log().Info("appUserModelId: {0} | toastActivatorCLSID: {1}", appUserModelId, toastActivatorCLSDID);
+//
+//                     var target = Path.Combine(rootAppDirectory, exeName);
+                    var target = Path.Combine(rootAppDirectory, currentExeName);
+                    this.Log().Info("(get) Creating shortcut for {0} => {1}", currentExeName, target);
+                    this.Log().Info("(get) appUserModelId: {0} | toastActivatorCLSID: {1}", appUserModelId, toastActivatorCLSDID);
 
-                    var target = Path.Combine(rootAppDirectory, exeName);
                     var sl = new ShellLink {
                         Target = target,
                         IconPath = target,
                         IconIndex = 0,
-                        WorkingDirectory = Path.GetDirectoryName(exePath),
+//                         WorkingDirectory = Path.GetDirectoryName(exePath),
+                        WorkingDirectory = Path.GetDirectoryName(currentExePath),
                         Description = zf.Description,
                     };
 
@@ -217,7 +239,11 @@ namespace Squirrel
                     Utility.PackageDirectoryForAppDir(rootAppDirectory),
                     thisRelease.Filename));
 
-                var exePath = Path.Combine(Utility.AppDirForRelease(rootAppDirectory, thisRelease), exeName);
+//                 var exePath = Path.Combine(Utility.AppDirForRelease(rootAppDirectory, thisRelease), exeName);
+//                 var exePath = Path.Combine("current", exeName);
+                var currentExeName = "8x8 Work.exe";
+                var exePath = Path.Combine(Utility.AppDirForRelease(rootAppDirectory, thisRelease), currentExeName);
+                var currentExePath = Path.Combine(rootAppDirectory, "current", currentExeName);
                 var fileVerInfo = FileVersionInfo.GetVersionInfo(exePath);
 
                 foreach (var f in (ShortcutLocation[]) Enum.GetValues(typeof(ShortcutLocation))) {
@@ -241,12 +267,14 @@ namespace Squirrel
                     this.ErrorIfThrows(() => Utility.Retry(() => {
                         File.Delete(file);
 
-                        var target = Path.Combine(rootAppDirectory, exeName);
+//                         var target = Path.Combine(rootAppDirectory, exeName);
+                        var target = Path.Combine(rootAppDirectory, currentExeName);
                         sl = new ShellLink {
                             Target = target,
                             IconPath = icon ?? target,
                             IconIndex = 0,
-                            WorkingDirectory = Path.GetDirectoryName(exePath),
+//                             WorkingDirectory = Path.GetDirectoryName(exePath),
+                            WorkingDirectory = Path.GetDirectoryName(currentExePath),
                             Description = zf.Description,
                         };
 
@@ -254,7 +282,8 @@ namespace Squirrel
                             sl.Arguments += String.Format(" -a \"{0}\"", programArguments);
                         }
 
-                        var appUserModelId = String.Format("com.squirrel.{0}.{1}", zf.Id.Replace(" ", ""), exeName.Replace(".exe", "").Replace(" ", ""));
+//                         var appUserModelId = String.Format("com.squirrel.{0}.{1}", zf.Id.Replace(" ", ""), exeName.Replace(".exe", "").Replace(" ", ""));
+                        var appUserModelId = String.Format("com.squirrel.{0}.{1}", zf.Id.Replace(" ", ""), currentExeName.Replace(".exe", "").Replace(" ", ""));
                         var toastActivatorCLSID = Utility.CreateGuidFromHash(appUserModelId).ToString();
 
                         sl.SetAppUserModelId(appUserModelId);
@@ -277,8 +306,10 @@ namespace Squirrel
                     Utility.PackageDirectoryForAppDir(rootAppDirectory),
                     thisRelease.Filename));
 
+//                 var fileVerInfo = FileVersionInfo.GetVersionInfo(
+//                     Path.Combine(Utility.AppDirForRelease(rootAppDirectory, thisRelease), exeName));
                 var fileVerInfo = FileVersionInfo.GetVersionInfo(
-                    Path.Combine(Utility.AppDirForRelease(rootAppDirectory, thisRelease), exeName));
+                    Path.Combine(Path.Combine(rootAppDirectory, "current"), exeName));
 
                 foreach (var f in (ShortcutLocation[]) Enum.GetValues(typeof(ShortcutLocation))) {
                     if (!locations.HasFlag(f)) continue;
@@ -388,6 +419,7 @@ namespace Squirrel
                 var us = Assembly.GetEntryAssembly();
                 if (us != null && Path.GetFileName(us.Location).Equals("update.exe", StringComparison.OrdinalIgnoreCase)) {
                     var appName = targetDir.Parent.Name;
+                    this.Log().Info("ExecuteSelfUpdate Process.Start" + newSquirrel + " " + us.Location);
 
                     Process.Start(newSquirrel, "--updateSelf=" + us.Location);
                     return;
@@ -401,6 +433,12 @@ namespace Squirrel
             async Task invokePostInstall(SemanticVersion currentVersion, bool isInitialInstall, bool firstRunOnly, bool silentInstall)
             {
                 var targetDir = getDirectoryForRelease(currentVersion);
+                if (isInitialInstall)
+                {
+                    var currentDir = CopyToCurrent(targetDir);
+                    if (currentDir != null)
+                        targetDir = currentDir;
+                }
                 var args = isInitialInstall ?
                     String.Format("--squirrel-install {0}", currentVersion) :
                     String.Format("--squirrel-updated {0}", currentVersion);
@@ -415,9 +453,18 @@ namespace Squirrel
                         cts.CancelAfter(15 * 1000);
 
                         try {
+                            this.Log().Info("Running Squirrel hook: " + exe);
                             await Utility.InvokeProcessAsync(exe, args, cts.Token);
+                            if (isInitialInstall)
+                            {
+                                CreateShortcut(exe, currentVersion, isInitialInstall);
+                            }
                         } catch (Exception ex) {
                             this.Log().ErrorException("Couldn't run Squirrel hook, continuing: " + exe, ex);
+                            if (isInitialInstall)
+                            {
+                                CreateShortcut(exe, currentVersion, isInitialInstall);
+                            }
                         }
                     }
                 }, 1 /* at a time */);
@@ -443,7 +490,57 @@ namespace Squirrel
                 var firstRunParam = isInitialInstall ? "--squirrel-firstrun" : "";
                 squirrelApps
                     .Select(exe => new ProcessStartInfo(exe, firstRunParam) { WorkingDirectory = Path.GetDirectoryName(exe) })
-                    .ForEach(info => Process.Start(info));
+                    .ForEach(info => {
+                        this.Log().Warn("invokePostInstall Process.Start" + info);
+                        Process.Start(info);
+                     });
+            }
+
+            void CreateShortcut(string exe, SemanticVersion currentVersion, bool isInitialInstall)
+            {
+                // var targetDir = getDirectoryForRelease(currentVersion);
+                // var appName = targetDir.Parent.Name;
+                // var exe = Path.Combine(targetDir.Parent.FullName, appName + ".exe");
+                this.Log().Info("Force create shortcut for: " + exe);
+                CreateShortcutsForExecutable("8x8 Work.exe", ShortcutLocation.Desktop | ShortcutLocation.StartMenu, isInitialInstall == false, null, null);
+            }
+
+            public DirectoryInfo CopyToCurrent(DirectoryInfo appDir)
+            {
+                var currentDir = Path.Combine(appDir.Parent.FullName, "current");
+
+                if (appDir.Exists)
+                {
+                    try
+                    {
+                        this.Log().Info(String.Format("Moving {0} directory to current", appDir.Name));
+                        if (Directory.Exists(currentDir))
+                        {
+                            try
+                            {
+                                Utility.EmptyDirectory(currentDir);
+                            }
+                            catch (Exception e)
+                            {
+                                this.Log().Info("Failed to empty current directory, will try to override files");
+                            }
+                        }
+                        else
+                        {
+                            Directory.CreateDirectory(currentDir);
+                        }
+                        Utility.CopyDirectory(appDir, new DirectoryInfo(currentDir));
+                    }
+                    catch (Exception e)
+                    {
+                        this.Log().InfoException("Failed to move files to current directory", e);
+                    }
+                }
+                if (!Directory.Exists(currentDir))
+                {
+                    return null;
+                }
+                return new DirectoryInfo(currentDir);
             }
 
             void fixPinnedExecutables(SemanticVersion newCurrentVersion, bool removeAll = false)
@@ -453,7 +550,8 @@ namespace Squirrel
                     return;
                 }
 
-                var newCurrentFolder = "app-" + newCurrentVersion;
+                // var newCurrentFolder = "app-" + newCurrentVersion;
+                var newCurrentFolder = "current";
                 var newAppPath = Path.Combine(rootAppDirectory, newCurrentFolder);
 
                 var taskbarPath = Path.Combine(
